@@ -51,18 +51,24 @@ impl fmt::Display for InstallError {
     }
 }
 
-pub fn fetch_latest_release(repository: &str) -> Result<Release, String> {
+pub fn fetch_latest_release(repository: &str) -> Result<Option<Release>, String> {
     let url = format!("https://api.github.com/repos/{repository}/releases/latest");
-    let response = ureq::get(&url)
+    let result = ureq::get(&url)
         .set("Accept", "application/vnd.github+json")
         .set("User-Agent", "stopwatch-updater")
-        .call()
-        .map_err(|error| format!("Update check failed: {error}"))?;
+        .call();
+    let response = match result {
+        Ok(response) => response,
+        Err(ureq::Error::Status(404, _)) => return Ok(None),
+        Err(error) => return Err(format!("Update check failed: {error}")),
+    };
 
     let body = response
         .into_string()
         .map_err(|error| format!("Could not read the update response: {error}"))?;
-    serde_json::from_str(&body).map_err(|error| format!("Invalid update response: {error}"))
+    serde_json::from_str(&body)
+        .map(Some)
+        .map_err(|error| format!("Invalid update response: {error}"))
 }
 
 pub fn download_and_launch_installer(url: &str) -> Result<(), InstallError> {
