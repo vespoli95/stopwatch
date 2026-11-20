@@ -28,8 +28,9 @@ const ACCENT: Color32 = Color32::from_rgb(145, 184, 220);
 const TEXT: Color32 = Color32::from_rgb(235, 241, 249);
 const MUTED_TEXT: Color32 = Color32::from_rgb(215, 225, 238);
 const COMPACT_SIZE: f32 = 200.0;
-const TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(33);
-const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+const PINNED_TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(125);
+const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -344,7 +345,11 @@ impl eframe::App for StopwatchApp {
         self.position_pinned_window(ctx, frame);
         self.handle_background_work(ctx);
         if self.stopwatch.is_running() {
-            ctx.request_repaint_after(TIMER_REFRESH_INTERVAL);
+            ctx.request_repaint_after(if self.pinned {
+                PINNED_TIMER_REFRESH_INTERVAL
+            } else {
+                TIMER_REFRESH_INTERVAL
+            });
         }
         if self.update_rx.is_some() || self.install_rx.is_some() {
             ctx.request_repaint_after(BACKGROUND_POLL_INTERVAL);

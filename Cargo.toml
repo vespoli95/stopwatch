@@ -19,4 +19,5 @@ raw-window-handle = "0.6"
 strip = true
 lto = true
 codegen-units = 1
+panic = "abort"
 
