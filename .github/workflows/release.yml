@@ -1,0 +1,67 @@
+name: Windows Release
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Build and release Windows installer
+    runs-on: windows-latest
+    concurrency:
+      group: stopwatch-release-${{ github.ref }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Set build metadata
+        shell: pwsh
+        run: |
+          $shortSha = "${{ github.sha }}".Substring(0, 8)
+          "STOPWATCH_RELEASE_TAG=stopwatch-${{ github.run_number }}-$shortSha" >> $env:GITHUB_ENV
+
+      - name: Build
+        env:
+          STOPWATCH_UPDATE_REPOSITORY: ${{ github.repository }}
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress --yes
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+
+      - name: Build installer
+        shell: pwsh
+        run: iscc "/DMyAppVersion=${{ env.STOPWATCH_RELEASE_TAG }}" installer\stopwatch.iss
+
+      - name: Publish Windows installer
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.STOPWATCH_RELEASE_TAG }}
+          name: Stopwatch ${{ env.STOPWATCH_RELEASE_TAG }}
+          generate_release_notes: true
+          prerelease: false
+          files: |
+            dist/*.exe
+            target/x86_64-pc-windows-msvc/release/stopwatch.exe
+
+      - name: Keep downloadable workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stopwatch-${{ env.STOPWATCH_RELEASE_TAG }}-windows
+          path: |
+            dist/*.exe
+            target/x86_64-pc-windows-msvc/release/stopwatch.exe
+
