@@ -5,7 +5,7 @@ mod stopwatch;
 mod updater;
 
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use eframe::egui::{
     self, Align, Button, Color32, CornerRadius, Frame, Layout, Margin, RichText, Stroke, Vec2,
@@ -16,7 +16,6 @@ use stopwatch::Stopwatch;
 use updater::{InstallError, Release, UpdateState};
 
 const APP_NAME: &str = "Stopwatch";
-const UPDATE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const CURRENT_RELEASE: &str = match option_env!("STOPWATCH_RELEASE_TAG") {
     Some(tag) => tag,
     None => "development",
@@ -29,6 +28,8 @@ const ACCENT: Color32 = Color32::from_rgb(145, 184, 220);
 const TEXT: Color32 = Color32::from_rgb(235, 241, 249);
 const MUTED_TEXT: Color32 = Color32::from_rgb(215, 225, 238);
 const COMPACT_SIZE: f32 = 200.0;
+const TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(33);
+const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -43,7 +44,10 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         APP_NAME,
         options,
-        Box::new(|_creation_context| Ok(Box::new(StopwatchApp::default()))),
+        Box::new(|creation_context| {
+            StopwatchApp::apply_theme(&creation_context.egui_ctx);
+            Ok(Box::new(StopwatchApp::default()))
+        }),
     )
 }
 
@@ -54,7 +58,7 @@ struct StopwatchApp {
     update_state: UpdateState,
     update_rx: Option<mpsc::Receiver<Result<Option<Release>, String>>>,
     install_rx: Option<mpsc::Receiver<Result<(), InstallError>>>,
-    last_update_check: Option<Instant>,
+    launch_update_checked: bool,
     show_laps: bool,
     pending_pin_position_frames: u8,
 }
@@ -68,7 +72,7 @@ impl Default for StopwatchApp {
             update_state: UpdateState::Idle,
             update_rx: None,
             install_rx: None,
-            last_update_check: None,
+            launch_update_checked: false,
             show_laps: true,
             pending_pin_position_frames: 0,
         }
@@ -173,7 +177,6 @@ impl StopwatchApp {
         };
 
         self.update_state = UpdateState::Checking;
-        self.last_update_check = Some(Instant::now());
         let (tx, rx) = mpsc::channel();
         self.update_rx = Some(rx);
         let repository = repository.to_owned();
@@ -207,11 +210,8 @@ impl StopwatchApp {
             }
         }
 
-        if self.last_update_check.is_none()
-            || self
-                .last_update_check
-                .is_some_and(|last| last.elapsed() >= UPDATE_INTERVAL)
-        {
+        if !self.launch_update_checked {
+            self.launch_update_checked = true;
             self.check_for_updates();
         }
     }
@@ -341,11 +341,13 @@ fn timer_button(label: &str, compact: bool) -> Button<'_> {
 
 impl eframe::App for StopwatchApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        Self::apply_theme(ctx);
         self.position_pinned_window(ctx, frame);
         self.handle_background_work(ctx);
         if self.stopwatch.is_running() {
-            ctx.request_repaint();
+            ctx.request_repaint_after(TIMER_REFRESH_INTERVAL);
+        }
+        if self.update_rx.is_some() || self.install_rx.is_some() {
+            ctx.request_repaint_after(BACKGROUND_POLL_INTERVAL);
         }
 
         egui::CentralPanel::default()
