@@ -57,7 +57,7 @@ struct StopwatchApp {
     pinned: bool,
     release: Option<Release>,
     update_state: UpdateState,
-    update_rx: Option<mpsc::Receiver<Result<Option<Release>, String>>>,
+    update_rx: Option<mpsc::Receiver<Result<Release, String>>>,
     install_rx: Option<mpsc::Receiver<Result<(), InstallError>>>,
     launch_update_checked: bool,
     show_laps: bool,
@@ -162,7 +162,7 @@ impl StopwatchApp {
         ctx.request_repaint();
     }
 
-    fn check_for_updates(&mut self) {
+    fn check_for_updates(&mut self, ctx: &egui::Context) {
         if self.update_rx.is_some() {
             return;
         }
@@ -181,43 +181,65 @@ impl StopwatchApp {
         let (tx, rx) = mpsc::channel();
         self.update_rx = Some(rx);
         let repository = repository.to_owned();
+        let repaint_ctx = ctx.clone();
         std::thread::spawn(move || {
             let _ = tx.send(updater::fetch_latest_release(&repository));
+            repaint_ctx.request_repaint();
         });
+        ctx.request_repaint();
     }
 
     fn handle_background_work(&mut self, ctx: &egui::Context) {
-        if let Some(rx) = &self.update_rx
-            && let Ok(result) = rx.try_recv()
-        {
-            self.update_rx = None;
-            match result {
-                Ok(Some(release)) if release.tag_name != CURRENT_RELEASE => {
-                    self.release = Some(release);
-                    self.update_state = UpdateState::Available;
+        match self.update_rx.as_ref().map(mpsc::Receiver::try_recv) {
+            Some(Ok(result)) => {
+                self.update_rx = None;
+                match result {
+                    Ok(release) if release.tag_name != CURRENT_RELEASE => {
+                        self.release = Some(release);
+                        self.update_state = UpdateState::Available;
+                    }
+                    Ok(_) => {
+                        self.release = None;
+                        self.update_state = UpdateState::Current;
+                    }
+                    Err(message) => self.update_state = UpdateState::Failed(message),
                 }
-                Ok(_) => self.update_state = UpdateState::Current,
-                Err(message) => self.update_state = UpdateState::Failed(message),
             }
+            Some(Err(mpsc::TryRecvError::Disconnected)) => {
+                self.update_rx = None;
+                self.update_state =
+                    UpdateState::Failed("Update check stopped unexpectedly.".to_owned());
+            }
+            Some(Err(mpsc::TryRecvError::Empty)) | None => {}
         }
 
-        if let Some(rx) = &self.install_rx
-            && let Ok(result) = rx.try_recv()
-        {
-            self.install_rx = None;
-            match result {
-                Ok(()) => ctx.send_viewport_cmd(ViewportCommand::Close),
-                Err(error) => self.update_state = UpdateState::Failed(error.to_string()),
+        match self.install_rx.as_ref().map(mpsc::Receiver::try_recv) {
+            Some(Ok(Ok(()))) => {
+                self.install_rx = None;
+                ctx.send_viewport_cmd(ViewportCommand::Close);
             }
+            Some(Ok(Err(error))) => {
+                self.install_rx = None;
+                self.update_state = UpdateState::Failed(error.to_string());
+            }
+            Some(Err(mpsc::TryRecvError::Disconnected)) => {
+                self.install_rx = None;
+                self.update_state =
+                    UpdateState::Failed("Update install stopped unexpectedly.".to_owned());
+            }
+            Some(Err(mpsc::TryRecvError::Empty)) | None => {}
         }
 
         if !self.launch_update_checked {
             self.launch_update_checked = true;
-            self.check_for_updates();
+            self.check_for_updates(ctx);
         }
     }
 
-    fn install_update(&mut self) {
+    fn install_update(&mut self, ctx: &egui::Context) {
+        if self.install_rx.is_some() {
+            return;
+        }
         let Some(release) = self.release.clone() else {
             return;
         };
@@ -231,9 +253,12 @@ impl StopwatchApp {
         self.update_state = UpdateState::Installing;
         let (tx, rx) = mpsc::channel();
         self.install_rx = Some(rx);
+        let repaint_ctx = ctx.clone();
         std::thread::spawn(move || {
             let _ = tx.send(updater::download_and_launch_installer(&installer_url));
+            repaint_ctx.request_repaint();
         });
+        ctx.request_repaint();
     }
 
     fn controls(&mut self, ui: &mut egui::Ui) {
@@ -308,7 +333,7 @@ impl StopwatchApp {
                 ui.horizontal_wrapped(|ui| {
                     ui.colored_label(TEXT, "A Stopwatch update is available.");
                     if ui.button("Install update").clicked() {
-                        self.install_update();
+                        self.install_update(ui.ctx());
                     }
                 });
             }
@@ -318,7 +343,7 @@ impl StopwatchApp {
             UpdateState::Failed(message) => {
                 ui.colored_label(TEXT, message);
                 if ui.button("Retry update check").clicked() {
-                    self.check_for_updates();
+                    self.check_for_updates(ui.ctx());
                 }
             }
             UpdateState::Current => {

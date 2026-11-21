@@ -53,6 +53,7 @@ jobs:
           name: Stopwatch ${{ env.STOPWATCH_RELEASE_TAG }}
           generate_release_notes: true
           prerelease: false
+          make_latest: true
           files: |
             dist/*.exe
             target/x86_64-pc-windows-msvc/release/stopwatch.exe

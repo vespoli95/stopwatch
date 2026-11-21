@@ -22,15 +22,17 @@ both a downloadable artifact and a GitHub Release containing
 `stopwatch-setup-<build>.exe`. Run the setup executable to install Stopwatch;
 Start Menu and optional Desktop shortcuts are created.
 
-Apps built by that workflow check for the latest release once when opened. When
-an update is available, select **Install update**. An app built locally does not
-check because it has no GitHub repository configured.
+Apps built by that workflow check for the latest release once when opened. The
+GitHub repository must be public so unauthenticated release checks and asset
+downloads succeed. When an update is available, select **Install update** to
+download, silently install, and relaunch Stopwatch. An app built locally does
+not check because it has no GitHub repository configured.
 
 To build a local update-enabled binary manually:
 
 ```bash
 STOPWATCH_UPDATE_REPOSITORY=owner/repository \
-STOPWATCH_RELEASE_TAG=development \
+STOPWATCH_RELEASE_TAG=local-test \
 cargo build --release
 ```
 

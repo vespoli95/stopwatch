@@ -32,6 +32,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Run]
 Filename: "{app}\stopwatch.exe"; Description: "Launch Stopwatch"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\stopwatch.exe"; Flags: nowait skipifnotsilent
 
 [UninstallDelete]
 Type: files; Name: "{app}\stopwatch.log"
