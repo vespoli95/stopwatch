@@ -1,12 +1,12 @@
 # Stopwatch
 
-A small Rust desktop stopwatch with start, pause, reset, lap timing, and a
+A small Rust desktop stopwatch with start, pause, reset, and a
 Windows Clock-style always-on-top mode. Pinning places a compact window at the
 top-right of the active display and keeps it above other windows.
 
 Absolute window placement is supported by Windows and X11. Wayland compositors
 intentionally prevent applications from choosing their screen coordinates, so
-the square always-on-top layout is used there but the compositor chooses where
+the compact always-on-top layout is used there but the compositor chooses where
 to place it.
 
 ## Run locally

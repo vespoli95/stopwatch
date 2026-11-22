@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 pub struct Stopwatch {
     started_at: Option<Instant>,
     accumulated: Duration,
-    laps: Vec<Duration>,
 }
 
 impl Stopwatch {
@@ -34,17 +33,6 @@ impl Stopwatch {
     pub fn reset(&mut self) {
         self.started_at = None;
         self.accumulated = Duration::ZERO;
-        self.laps.clear();
-    }
-
-    pub fn record_lap(&mut self) {
-        let elapsed = self.elapsed();
-        let previous_total = self.laps.iter().sum::<Duration>();
-        self.laps.push(elapsed.saturating_sub(previous_total));
-    }
-
-    pub fn laps(&self) -> &[Duration] {
-        &self.laps
     }
 
     pub fn formatted(&self) -> String {
@@ -65,7 +53,7 @@ impl Stopwatch {
 mod tests {
     use super::Stopwatch;
     use std::thread;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     #[test]
     fn formats_elapsed_time() {
@@ -94,31 +82,14 @@ mod tests {
     }
 
     #[test]
-    fn lap_records_each_interval_instead_of_cumulative_time() {
-        let stopwatch = Stopwatch {
-            started_at: Some(Instant::now()),
-            accumulated: Duration::from_millis(2_500),
-            laps: vec![Duration::from_millis(1_000), Duration::from_millis(900)],
-        };
-        let mut stopwatch = stopwatch;
-
-        stopwatch.record_lap();
-
-        assert_eq!(stopwatch.laps().len(), 3);
-        assert!(stopwatch.laps()[2] >= Duration::from_millis(590));
-        assert!(stopwatch.laps()[2] < Duration::from_millis(1_000));
-    }
-
-    #[test]
-    fn reset_clears_timer_and_laps() {
+    fn reset_clears_timer() {
         let mut stopwatch = Stopwatch::new();
         stopwatch.toggle();
-        stopwatch.record_lap();
+        thread::sleep(Duration::from_millis(10));
         stopwatch.reset();
 
         assert!(!stopwatch.is_running());
         assert!(stopwatch.elapsed().is_zero());
-        assert!(stopwatch.laps().is_empty());
     }
 
     #[test]
