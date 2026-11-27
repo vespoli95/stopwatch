@@ -19,6 +19,7 @@ PrivilegesRequired=lowest
 SetupLogging=yes
 CloseApplications=force
 UninstallDisplayIcon={app}\stopwatch.exe
+SetupIconFile=..\assets\icon.ico
 
 [Files]
 Source: "..\target\x86_64-pc-windows-msvc\release\stopwatch.exe"; DestDir: "{app}"; Flags: ignoreversion

@@ -5,7 +5,7 @@ mod sheets;
 mod stopwatch;
 mod updater;
 
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use eframe::egui::{
@@ -41,14 +41,23 @@ const TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(47);
 const PINNED_TIMER_REFRESH_INTERVAL: Duration = Duration::from_millis(63);
 const BACKGROUND_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+fn load_app_icon() -> Option<egui::IconData> {
+    eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).ok()
+}
+
 fn main() -> eframe::Result<()> {
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title(APP_NAME)
+        .with_inner_size(UNPINNED_SIZE)
+        .with_min_inner_size([400.0, 300.0])
+        .with_resizable(true)
+        .with_transparent(true);
+    if let Some(icon) = load_app_icon() {
+        viewport = viewport.with_icon(Arc::new(icon));
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title(APP_NAME)
-            .with_inner_size(UNPINNED_SIZE)
-            .with_min_inner_size([400.0, 300.0])
-            .with_resizable(true)
-            .with_transparent(true),
+        viewport,
         ..Default::default()
     };
 
@@ -56,6 +65,7 @@ fn main() -> eframe::Result<()> {
         APP_NAME,
         options,
         Box::new(|creation_context| {
+            native_windows::apply_window_icon(creation_context);
             StopwatchApp::apply_theme(&creation_context.egui_ctx);
             Ok(Box::new(StopwatchApp::new()))
         }),
@@ -1671,5 +1681,51 @@ mod tests {
             !has_start_drag(&cmds),
             "stationary press on whitespace without movement must not emit StartDrag: {cmds:?}"
         );
+    }
+
+    #[test]
+    fn app_icon_png_decodes_to_expected_rgba() {
+        let icon = load_app_icon().expect("assets/icon.png should decode");
+        assert_eq!(icon.width, 256);
+        assert_eq!(icon.height, 256);
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+    }
+
+    #[test]
+    fn app_icon_ico_has_multi_resolution_frames() {
+        let bytes = include_bytes!("../assets/icon.ico");
+        assert!(bytes.len() >= 6);
+        assert_eq!(&bytes[0..4], &[0, 0, 1, 0]);
+        let count = u16::from_le_bytes([bytes[4], bytes[5]]) as usize;
+        assert!(bytes.len() >= 6 + count * 16);
+
+        let mut sizes = Vec::with_capacity(count);
+        for idx in 0..count {
+            let entry = &bytes[6 + idx * 16..6 + (idx + 1) * 16];
+            let width = if entry[0] == 0 {
+                256
+            } else {
+                u16::from(entry[0])
+            };
+            let height = if entry[1] == 0 {
+                256
+            } else {
+                u16::from(entry[1])
+            };
+            assert_eq!(width, height);
+            let data_size =
+                u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+            let data_offset =
+                u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+            assert!(data_offset + data_size <= bytes.len());
+            sizes.push(width);
+        }
+
+        for expected in [16, 24, 32, 48, 64, 256] {
+            assert!(
+                sizes.contains(&expected),
+                "missing {expected}x{expected} frame in assets/icon.ico: {sizes:?}"
+            );
+        }
     }
 }
